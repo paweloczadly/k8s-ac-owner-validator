@@ -1,0 +1,54 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: owner-validator
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        controller: owner-validator
+    spec:
+      containers:
+      - name: app
+        image: paweloczadly/k8s-ac-owner-validator
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 443
+        volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: owner-validator-certs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: owner-validator
+spec:
+  selector:
+    controller: owner-validator
+  ports:
+  - protocol: TCP
+    port: 443
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: label-validation
+webhooks:
+- name: owner-validator.kubernetes.io
+  rules:
+  - apiGroups: [""]
+    apiVersions: ["v1"]
+    operations: ["CREATE"]
+    resources: ["pods"]
+  clientConfig:
+    service:
+      name: owner-validator
+      namespace: default
+      path: "/"
+    caBundle: ${CA_BUNDLE}
